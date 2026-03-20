@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-heading: "Outfit", system-ui, sans-serif;
+  
+  --color-dash-bg: #f8fafc;
+  --color-dash-card: #ffffff;
+  --color-dash-border: #e2e8f0;
+  
+  --color-status-red: #ef4444;
+  --color-status-yellow: #f59e0b;
+  --color-status-green: #10b981;
+}
+
+@layer base {
+  body {
+    @apply bg-dash-bg text-slate-800 font-sans antialiased;
+    margin: 0;
+  }
+}
