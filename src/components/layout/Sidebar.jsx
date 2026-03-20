@@ -9,7 +9,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, openSettings }) =
     { id: 'tower', label: 'Control Tower', icon: LayoutDashboard, roles: ['kam', 'admin'] },
     { id: 'capacity', label: 'Capacidad Talleres', icon: Activity, roles: ['admin'] },
     { id: 'logistics', label: 'Logística & Retiros', icon: Truck, roles: ['admin'] },
-    { id: 'labeling', label: 'Etiquetado QR', icon: Tag, roles: ['admin'] },
+    { id: 'labeling', label: 'Etiquetado QR', icon: Tag, roles: ['kam', 'admin'] },
     { id: 'conflicts', label: 'Conflictos', icon: TriangleAlert, roles: ['admin'] },
     { id: 'simulator', label: 'Simulador', icon: Settings, roles: ['admin'] },
     { id: 'workshop', label: 'Modo Taller', icon: Factory, roles: ['admin'] },

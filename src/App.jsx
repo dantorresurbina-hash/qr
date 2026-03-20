@@ -29,7 +29,7 @@ const PERMISSIONS = {
   tower: ['kam', 'admin'],
   capacity: ['admin'],
   logistics: ['admin'],
-  labeling: ['admin'],
+  labeling: ['kam', 'admin'],
   conflicts: ['admin'],
   simulator: ['admin'],
   workshop: ['admin'],
