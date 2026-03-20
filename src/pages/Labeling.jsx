@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useData } from '../context/DataContext';
+import { useData, cleanId } from '../context/DataContext';
 import { 
   Tag, 
   Search, 
@@ -22,6 +22,13 @@ const Labeling = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [specificBulto, setSpecificBulto] = useState(null);
+  const [manualPedido, setManualPedido] = useState(null);
+
+  // V8.5: Atajo rápido para encontrar pedidos específicos (ANFP 109589)
+  const exactMatch = useMemo(() => {
+    if (!searchTerm || searchTerm.length < 3) return null;
+    return data.find(p => String(p.pedido_id || p.id) === searchTerm.trim());
+  }, [data, searchTerm]);
 
   // Filtrar pedidos que típicamente requieren etiquetas (Producción activa)
   const filteredData = useMemo(() => {
@@ -93,23 +100,42 @@ const Labeling = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {syncQueueStatus > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-bold text-xs animate-pulse">
-              <RefreshCw size={14} className="animate-spin" />
-              <span>{syncQueueStatus} PENDIENTES</span>
-            </div>
-          )}
-          {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3">
+            {syncQueueStatus > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-bold text-xs animate-pulse">
+                <RefreshCw size={14} className="animate-spin" />
+                <span>{syncQueueStatus} PENDIENTES</span>
+              </div>
+            )}
+            
             <button
-              onClick={() => setIsLabelModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+              onClick={() => {
+                setManualPedido({
+                  pedido_id: searchTerm || 'NUEVO',
+                  nombre_proyecto: 'PROYECTO MANUAL',
+                  sku: '',
+                  unidades: 0,
+                  taller: 'Pintapack',
+                  isManual: true
+                });
+                setIsLabelModalOpen(true);
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 border border-slate-700"
             >
-              <Printer size={18} />
-              IMPRIMIR SELECCIONADOS ({selectedIds.length})
+              <Tag size={18} className="text-blue-400" />
+              CREAR MANUAL
             </button>
-          )}
-        </div>
+
+            {selectedIds.length > 0 && (
+              <button
+                onClick={() => setIsLabelModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+              >
+                <Printer size={18} />
+                IMPRIMIR SELECCIONADOS ({selectedIds.length})
+              </button>
+            )}
+          </div>
       </div>
 
       {/* Filtros */}
@@ -260,14 +286,21 @@ const Labeling = () => {
 
       {isLabelModalOpen && (
         <LabelGenerator 
-          pedidos={selectedPedidos}
+          pedidos={manualPedido ? [manualPedido] : selectedPedidos}
           specificBulto={specificBulto}
           onClose={() => {
             setIsLabelModalOpen(false);
             setSpecificBulto(null);
+            setManualPedido(null);
             if (selectedIds.length === 1) setSelectedIds([]);
           }}
-          onComplete={handleBulkComplete}
+          onComplete={(updates) => {
+            if (!manualPedido) handleBulkComplete(updates);
+            else {
+              setIsLabelModalOpen(false);
+              setManualPedido(null);
+            }
+          }}
         />
       )}
     </div>

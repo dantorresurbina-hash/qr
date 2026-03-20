@@ -13,6 +13,7 @@ const LabelGenerator = ({ pedidos, specificBulto = null, onClose, onComplete }) 
   const [bultosMap, setBultosMap] = useState({});
   const [generating, setGenerating] = useState(false);
   const [printed, setPrinted] = useState(false);
+  const [editMode, setEditMode] = useState({}); // Stores local edits for manual or quick fixes
 
   // Función para generar firma criptográfica
   const generateSignature = (id, bulto, total) => {
@@ -87,7 +88,7 @@ const LabelGenerator = ({ pedidos, specificBulto = null, onClose, onComplete }) 
         
         // Nombre Proyecto (Más compacto)
         doc.setFontSize(16);
-        const nombre = (p.nombre_proyecto || p.proyecto || "SIN NOMBRE").toUpperCase();
+        const nombre = (editMode[rawId]?.nombre || p.nombre_proyecto || p.proyecto || "SIN NOMBRE").toUpperCase();
         const splitTitle = doc.splitTextToSize(nombre, w - 10);
         doc.text(splitTitle.slice(0, 2), 5, 18);
 
@@ -99,12 +100,12 @@ const LabelGenerator = ({ pedidos, specificBulto = null, onClose, onComplete }) 
         doc.setFontSize(9);
         doc.text("SKU / MODELO:", 5, 35);
         doc.setFontSize(11);
-        doc.text(p.sku || "N/A", 5, 41);
+        doc.text(editMode[rawId]?.sku || p.sku || "N/A", 5, 41);
 
         doc.setFontSize(9);
         doc.text("CANTIDAD TOTAL:", 5, 49);
         doc.setFontSize(14);
-        doc.text(String(p.unidades || 0), 5, 57);
+        doc.text(String(editMode[rawId]?.unidades || p.unidades || 0), 5, 57);
 
         // QR Code (Posición fija a la derecha) con referencia al bulto específico
         const canvas = document.getElementById(`qr-canvas-${id}-${b}`);
@@ -121,11 +122,26 @@ const LabelGenerator = ({ pedidos, specificBulto = null, onClose, onComplete }) 
         doc.setTextColor(0);
 
         // Taller (Rediseñado para evitar solapamiento)
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.text("TALLER:", 5, 68);
-        doc.setFontSize(13); // Tamaño intermedio para que quepa "YUTE IMPRESIONES"
-        const tallerLabel = getTallerLabel(p.taller);
-        doc.text(tallerLabel, 5, 76);
+        doc.setFontSize(11);
+        const tallerLabel = getTallerLabel(editMode[rawId]?.taller || p.taller);
+        doc.text(tallerLabel, 5, 74);
+
+        // NUEVO: Detalles de Impresión (Desde el correo de ANFP)
+        const técnica = editMode[rawId]?.tecnica || "";
+        const detalles = editMode[rawId]?.detalles || "";
+        
+        if (técnica || detalles) {
+          doc.setFontSize(7);
+          doc.setTextColor(100);
+          doc.text("DETALLES DE IMPRESIÓN:", 5, 82);
+          doc.setTextColor(0);
+          doc.setFontSize(8);
+          doc.text(`${técnica}`.toUpperCase(), 5, 87);
+          const splitDetalles = doc.splitTextToSize(detalles.toUpperCase(), w - 50);
+          doc.text(splitDetalles.slice(0, 2), 5, 92);
+        }
 
         // Sello visual de Seguridad (Reposicionado para evitar tapa el nombre)
         doc.setDrawColor(200);
@@ -220,25 +236,108 @@ const LabelGenerator = ({ pedidos, specificBulto = null, onClose, onComplete }) 
             {listaPedidos.map((p) => {
               const id = p.pedido_id || p.id;
               const count = bultosMap[id] || 1;
+              const isManual = p.isManual;
+              
+              if (!editMode[id]) {
+                setEditMode(prev => ({
+                  ...prev,
+                  [id]: {
+                    nombre: p.nombre_proyecto || '',
+                    sku: p.sku || '',
+                    unidades: p.unidades || 0,
+                    taller: p.taller || 'Pintapack',
+                    tecnica: '',
+                    detalles: ''
+                  }
+                }));
+              }
+
               return (
-                <div key={id} className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-4 flex items-center justify-between group hover:border-blue-500/30 transition-all">
-                  <div className="flex-1 min-w-0 pr-4">
-                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter mb-0.5">#{id}</p>
-                    <p className="text-sm font-bold text-slate-100 truncate">{p.nombre_proyecto || p.proyecto}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{p.sku}</p>
-                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Cantidad: <span className="text-blue-400">{p.unidades}</span></p>
+                <div key={id} className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-5 space-y-4 group hover:border-blue-500/30 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <p className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter mb-0.5">#{id}</p>
+                      {isManual ? (
+                        <input 
+                          type="text"
+                          className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-bold text-white outline-none focus:border-blue-500"
+                          value={editMode[id]?.nombre || ''}
+                          onChange={(e) => setEditMode(prev => ({...prev, [id]: {...prev[id], nombre: e.target.value}}))}
+                          placeholder="Nombre del Proyecto"
+                        />
+                      ) : (
+                        <p className="text-sm font-bold text-slate-100 truncate">{p.nombre_proyecto || p.proyecto}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-3 bg-slate-800 rounded-xl p-1 border border-slate-700">
+                      <button 
+                        onClick={() => updateBultos(id, -1)}
+                        className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg text-slate-400 font-bold transition-all active:scale-90"
+                      >-</button>
+                      <span className="w-6 text-center font-mono font-bold text-blue-400 text-sm">{count}</span>
+                      <button 
+                        onClick={() => updateBultos(id, 1)}
+                        className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg text-slate-400 font-bold transition-all active:scale-90"
+                      >+</button>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3 bg-slate-800 rounded-xl p-1 border border-slate-700">
-                    <button 
-                      onClick={() => updateBultos(id, -1)}
-                      className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg text-slate-400 font-bold transition-all active:scale-90"
-                    >-</button>
-                    <span className="w-6 text-center font-mono font-bold text-blue-400 text-sm">{count}</span>
-                    <button 
-                      onClick={() => updateBultos(id, 1)}
-                      className="w-8 h-8 flex items-center justify-center hover:bg-slate-700 rounded-lg text-slate-400 font-bold transition-all active:scale-90"
-                    >+</button>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">SKU / Modelo</label>
+                      <input 
+                        type="text"
+                        className="w-full bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 outline-none focus:border-blue-500"
+                        value={editMode[id]?.sku || ''}
+                        onChange={(e) => setEditMode(prev => ({...prev, [id]: {...prev[id], sku: e.target.value}}))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Cantidad Total</label>
+                      <input 
+                        type="number"
+                        className="w-full bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 outline-none focus:border-blue-500"
+                        value={editMode[id]?.unidades || 0}
+                        onChange={(e) => setEditMode(prev => ({...prev, [id]: {...prev[id], unidades: parseInt(e.target.value) || 0}}))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Taller</label>
+                      <select 
+                        className="w-full bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 outline-none focus:border-blue-500"
+                        value={editMode[id]?.taller || 'Pintapack'}
+                        onChange={(e) => setEditMode(prev => ({...prev, [id]: {...prev[id], taller: e.target.value}}))}
+                      >
+                        <option value="Pintapack">Pintapack</option>
+                        <option value="Yute Impresiones">Yute Impresiones</option>
+                        <option value="We are Spa">We are Spa</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Técnica/Color</label>
+                      <input 
+                        type="text"
+                        className="w-full bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 outline-none focus:border-blue-500"
+                        placeholder="Ej: 1 Color Blanco"
+                        value={editMode[id]?.tecnica || ''}
+                        onChange={(e) => setEditMode(prev => ({...prev, [id]: {...prev[id], tecnica: e.target.value}}))}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Ubicación / Detalles</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 outline-none focus:border-blue-500"
+                      placeholder="Ej: Centrado, a 5.4cm del borde"
+                      value={editMode[id]?.detalles || ''}
+                      onChange={(e) => setEditMode(prev => ({...prev, [id]: {...prev[id], detalles: e.target.value}}))}
+                    />
                   </div>
                 </div>
               );
