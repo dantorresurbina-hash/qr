@@ -1,15 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useData, cleanId } from '../context/DataContext';
-import { 
-  Tag, 
-  Search, 
-  Filter, 
-  CheckCircle, 
-  Printer, 
+import {
+  Tag,
+  Search,
+  Filter,
+  Printer,
   AlertCircle,
-  Clock,
-  ChevronDown,
-  ChevronUp,
   RefreshCw
 } from 'lucide-react';
 import LabelGenerator from '../components/LabelGenerator';
@@ -24,30 +20,46 @@ const Labeling = () => {
   const [specificBulto, setSpecificBulto] = useState(null);
   const [manualPedido, setManualPedido] = useState(null);
 
-  // V8.5: Atajo rápido para encontrar pedidos específicos (ANFP 109589)
-  const exactMatch = useMemo(() => {
-    if (!searchTerm || searchTerm.length < 3) return null;
-    return data.find(p => String(p.pedido_id || p.id) === searchTerm.trim());
-  }, [data, searchTerm]);
+  // Normaliza strings para comparación robusta (sin tildes, minúsculas, sin espacios extra)
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
-  // Filtrar pedidos que típicamente requieren etiquetas (Producción activa)
-  const filteredData = useMemo(() => {
+  // Clave única por pedido: ID + nombre — evita colisiones de _row_key entre hojas del GAS,
+  // pero preserva entradas con mismo ID y distinto proyecto (ej: LÁSER NOW 1 y LÁSER NOW 2).
+  const getKey = (p) => `${String(p.pedido_id || p.id || '')}|${String(p.nombre_proyecto || '').trim()}`;
+
+  // Deduplicar: elimina filas idénticas (mismo ID + mismo nombre) provenientes de varias hojas
+  const dedupedData = useMemo(() => {
+    const seen = new Set();
     return data.filter(p => {
-      const matchesSearch = 
-        String(p.pedido_id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(p.nombre_proyecto || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const status = String(p.estado_produccion || '').toLowerCase();
-      const matchesStatus = statusFilter === 'all' || status === statusFilter.toLowerCase();
-      
-      // Mostrar solo pedidos activos (no anulados, no terminados logísticamente si aplica)
-      return matchesSearch && matchesStatus && status !== 'anulado';
+      const key = getKey(p);
+      if (!key || key === '|' || seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-  }, [data, searchTerm, statusFilter]);
+  }, [data]);
 
-  const toggleSelect = (rowKey) => {
-    setSelectedIds(prev => 
-      prev.includes(rowKey) ? prev.filter(i => i !== rowKey) : [...prev, rowKey]
+  // Filtrar pedidos
+  const filteredData = useMemo(() => {
+    return dedupedData.filter(p => {
+      const matchesSearch =
+        norm(p.pedido_id).includes(norm(searchTerm)) ||
+        norm(p.nombre_proyecto).includes(norm(searchTerm));
+
+      const status = norm(p.estado_produccion);
+
+      // Con filtro "all": ocultar entregados y anulados (no necesitan etiqueta)
+      if (statusFilter === 'all') {
+        return matchesSearch && status !== 'anulado' && status !== 'entregado';
+      }
+
+      // Con filtro específico: comparación normalizada (ignora tildes y mayúsculas)
+      return matchesSearch && status === norm(statusFilter);
+    });
+  }, [dedupedData, searchTerm, statusFilter]);
+
+  const toggleSelect = (key) => {
+    setSelectedIds(prev =>
+      prev.includes(key) ? prev.filter(i => i !== key) : [...prev, key]
     );
   };
 
@@ -55,12 +67,12 @@ const Labeling = () => {
     if (selectedIds.length === filteredData.length && filteredData.length > 0) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredData.map(p => p._row_key || p.pedido_id || p.id));
+      setSelectedIds(filteredData.map(getKey));
     }
   };
 
   const selectedPedidos = useMemo(() => {
-    return data.filter(p => selectedIds.includes(p._row_key || p.pedido_id || p.id));
+    return data.filter(p => selectedIds.includes(getKey(p)));
   }, [data, selectedIds]);
 
   const handleBulkComplete = async (pedidosParaActualizar) => {
@@ -157,12 +169,16 @@ const Labeling = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="border border-slate-200 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">Todos los estados</option>
-            <option value="Pasar correo">Pasar correo</option>
-            <option value="Correo enviado">Correo enviado</option>
-            <option value="VB Cliente">VB Cliente</option>
-            <option value="Etiquetado">Etiquetado</option>
-            <option value="En Proceso">En Proceso</option>
+            <option value="all">Activos (sin entregados)</option>
+            <option value="pasar correo">Pasar correo</option>
+            <option value="correo enviado">Correo enviado</option>
+            <option value="vb cliente">VB Cliente</option>
+            <option value="etiquetado">Etiquetado</option>
+            <option value="en proceso">En Proceso</option>
+            <option value="listo impresor">Listo Impresor</option>
+            <option value="listo taller">Listo Taller</option>
+            <option value="asignado">Asignado</option>
+            <option value="entregado">Entregados</option>
           </select>
         </div>
       </div>
@@ -190,7 +206,7 @@ const Labeling = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredData.map(p => {
-                  const itemKey = p._row_key || p.pedido_id || p.id;
+                  const itemKey = getKey(p);
                   return (
                     <tr 
                       key={itemKey} 

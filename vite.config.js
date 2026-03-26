@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/Control_Tower/',
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
     include: ['recharts'],

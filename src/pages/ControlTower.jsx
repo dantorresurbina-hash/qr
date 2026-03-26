@@ -2,6 +2,7 @@ import React from 'react';
 import { Layers, Truck, CalendarClock, AlertCircle, Zap, Activity } from 'lucide-react';
 import { useData, getLocalYMD, formatDateDisplay } from '../context/DataContext';
 import StatusBadge from '../components/StatusBadge';
+import ProjectDetailsModal from '../components/ProjectDetailsModal';
 
 const StatCard = ({ title, value, icon: Icon, color, trend }) => (
   <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
@@ -24,6 +25,13 @@ const StatCard = ({ title, value, icon: Icon, color, trend }) => (
 
 const ControlTower = () => {
   const { data: mockConsolidatedData, isLoading } = useData();
+  const [selectedPedido, setSelectedPedido] = React.useState(null);
+
+  React.useEffect(() => {
+    if (mockConsolidatedData && mockConsolidatedData.length > 0) {
+      console.log("DEBUG: Primer pedido de la data:", mockConsolidatedData[0]);
+    }
+  }, [mockConsolidatedData]);
 
   if (isLoading) {
     return (
@@ -113,7 +121,11 @@ const ControlTower = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {pedidosCriticos.map((pedido) => (
-                <tr key={pedido._row_key || pedido.pedido_id} className="hover:bg-slate-50 transition-colors">
+                <tr 
+                  key={pedido._row_key || pedido.pedido_id} 
+                  className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  onClick={() => setSelectedPedido(pedido)}
+                >
                   <td className="px-6 py-4 font-medium text-slate-900 border-l-4 border-l-transparent hover:border-l-accent uppercase">#{pedido.pedido_id}</td>
                   <td className="px-6 py-4 text-slate-600 truncate max-w-[200px]" title={pedido.nombre_proyecto}>{pedido.nombre_proyecto}</td>
                   <td className="px-6 py-4 text-slate-600 font-medium">{pedido.taller}</td>
@@ -149,6 +161,13 @@ const ControlTower = () => {
           </table>
         </div>
       </div>
+
+      {selectedPedido && (
+        <ProjectDetailsModal 
+          pedido={selectedPedido} 
+          onClose={() => setSelectedPedido(null)} 
+        />
+      )}
     </div>
   );
 };
