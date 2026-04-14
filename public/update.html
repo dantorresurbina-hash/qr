@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Control Tower · QR Update</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100svh; }
+    .page { max-width: 420px; margin: 0 auto; padding: 16px; }
+
+    /* Typography */
+    .label-xs  { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+    .label-sm  { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; }
+    .text-xs   { font-size: 12px; }
+    .text-sm   { font-size: 13px; }
+
+    /* Cards */
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 20px; margin-bottom: 12px; }
+
+    /* Status badge */
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .badge-blue   { background: #1e3a5f; color: #60a5fa; }
+    .badge-amber  { background: #451a03; color: #fbbf24; }
+    .badge-green  { background: #052e16; color: #4ade80; }
+    .badge-indigo { background: #1e1b4b; color: #a5b4fc; }
+    .badge-slate  { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+
+    /* Auth banner */
+    .auth-ok  { background: #052e16; border: 1px solid #166534; border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; color: #4ade80; margin-bottom: 12px; }
+    .auth-err { background: #450a0a; border: 1px solid #991b1b; border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; color: #f87171; margin-bottom: 12px; }
+    .auth-tag { font-size: 9px; font-weight: 900; background: #4ade80; color: #052e16; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+
+    /* Grid info */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 12px; border-top: 1px solid #334155; margin-top: 12px; }
+    .info-val  { font-size: 20px; font-weight: 900; font-variant-numeric: tabular-nums; color: #60a5fa; margin-top: 2px; }
+    .info-val.white { color: #f1f5f9; }
+
+    /* Trazabilidad */
+    .trace-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 0; }
+    .trace-row + .trace-row { border-top: 1px solid #334155; padding-top: 8px; margin-top: 4px; }
+    .trace-right { text-align: right; }
+    .trace-date  { display: block; color: #e2e8f0; }
+    .trace-who   { display: block; font-size: 10px; font-weight: 900; color: #818cf8; margin-top: 1px; }
+
+    /* Selector */
+    select, input[type="text"] {
+      width: 100%; background: #0f172a; color: #f1f5f9; padding: 14px 16px;
+      border-radius: 12px; border: 1px solid #334155; font-size: 14px; font-weight: 700;
+      outline: none; appearance: none; -webkit-appearance: none;
+    }
+    select:focus, input[type="text"]:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
+    input::placeholder { color: #475569; }
+
+    /* Buttons */
+    .btn {
+      width: 100%; padding: 22px 16px; border: none; border-radius: 16px;
+      font-size: 16px; font-weight: 900; cursor: pointer; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; transition: transform .1s, opacity .2s; line-height: 1.2;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+    .btn span.sub { font-size: 10px; font-weight: 700; opacity: .7; text-transform: uppercase; letter-spacing: .08em; }
+    .btn-indigo { background: #4f46e5; color: #fff; box-shadow: 0 4px 20px rgba(79,70,229,.3); }
+    .btn-amber  { background: #d97706; color: #fff; box-shadow: 0 4px 20px rgba(217,119,6,.3); }
+    .btn-green  { background: #059669; color: #fff; box-shadow: 0 4px 20px rgba(5,150,105,.3); }
+    .btn-blue   { background: #2563eb; color: #fff; box-shadow: 0 4px 20px rgba(37,99,235,.3); }
+    .btn-done   { background: #1e293b; color: #475569; border: 1px solid #334155; cursor: default; }
+
+    /* Success state */
+    .success-box { background: #052e16; border: 1px solid #166534; border-radius: 16px; padding: 32px 20px; text-align: center; }
+    .success-icon { font-size: 48px; margin-bottom: 12px; }
+    .success-title { font-size: 20px; font-weight: 900; color: #4ade80; margin-bottom: 6px; }
+    .success-sub { font-size: 13px; color: #6b7280; }
+    .btn-retry { background: none; border: none; color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; margin-top: 16px; }
+    .btn-retry:hover { color: #94a3b8; }
+
+    /* Modal overlay */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .modal-box { background: #fff; border-radius: 24px; padding: 28px; width: 100%; max-width: 380px; }
+    .modal-title { font-size: 18px; font-weight: 900; color: #1e293b; margin-bottom: 12px; }
+    textarea { width: 100%; height: 112px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 12px; font-size: 13px; font-weight: 700; color: #1e293b; background: #f8fafc; outline: none; resize: none; font-family: inherit; }
+    textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.2); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-cancel { flex: 1; padding: 14px; border: none; border-radius: 12px; font-weight: 900; color: #94a3b8; background: none; cursor: pointer; font-family: inherit; }
+    .modal-save   { flex: 2; padding: 14px; border: none; border-radius: 12px; font-weight: 900; color: #fff; background: #4f46e5; cursor: pointer; font-family: inherit; box-shadow: 0 2px 10px rgba(79,70,229,.3); }
+
+    /* Loading / error */
+    .center { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60svh; text-align: center; gap: 12px; }
+    .spinner { width: 44px; height: 44px; border: 4px solid #1e293b; border-top-color: #6366f1; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .offline-bar { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); border-radius: 10px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 10px; font-weight: 900; color: #f59e0b; text-transform: uppercase; letter-spacing: .06em; }
+    .footer { text-align: center; font-size: 10px; color: #334155; text-transform: uppercase; letter-spacing: .06em; margin-top: 32px; padding-bottom: 20px; }
+    .mt-3 { margin-top: 12px; }
+    .gap-3 { display: flex; flex-direction: column; gap: 12px; }
+  </style>
+</head>
+<body>
+<div class="page" id="app">
+  <div class="center">
+    <div class="spinner"></div>
+    <p class="text-sm" style="color:#64748b">Verificando pedido…</p>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────
+// CONFIGURACIÓN — editar solo QR_GAS_URL tras el deploy
+// ─────────────────────────────────────────────────────
+const CFG = {
+  // ⚠️ REEMPLAZAR con la URL del nuevo GAS desplegado (QR_FAST_UPDATE.gs)
+  QR_GAS_URL: 'https://script.google.com/macros/s/AKfycbz-IN1PirS4Kbj4U33jmFuz8NuaTiK5S46K9fGxNDdPUVjUwkleTlZMGWKz2iVRKOY2/exec',
+
+  // Debe coincidir con QR_CFG.CLIENT_SALT en QR_FAST_UPDATE.gs
+  CLIENT_SALT: 'yute_impresiones_secure_2024_auth_key_v1',
+
+  STAFF_PICKING:   ['Manuel Cardozo', 'Otro'],
+  STAFF_IMPRESION: ['Gabriel Acevedo', 'Dillan Hernández', 'Ricardo Hernández', 'Miguel Palomino', 'Otro'],
+};
+
+// ─────────────────────────────────────────────────────
+// ESTADO GLOBAL
+// ─────────────────────────────────────────────────────
+const STATE = {
+  pedidoId: null,
+  bNum: null,
+  bTotal: null,
+  sig: null,
+  pedido: null,
+  isAuthentic: null,
+  operario: localStorage.getItem('yute_operario_picking') || '',
+  impresor: localStorage.getItem('yute_operario_impresion') || '',
+  nombreManual: '',
+  comentario: '',
+  success: false,
+  updating: false,
+  offlineQueue: JSON.parse(localStorage.getItem('qr_offline_queue') || '[]'),
+};
+
+// ─────────────────────────────────────────────────────
+// UTILIDADES
+// ─────────────────────────────────────────────────────
+
+function cleanId(id) {
+  return String(id || '').replace(/#/g, '').trim();
+}
+
+function now() {
+  return new Date().toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+// HMAC-SHA256 usando Web Crypto API nativa (idéntico a CryptoJS)
+async function computeHMAC(message, key) {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', enc.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+  return Array.from(new Uint8Array(sig))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .substring(0, 10);
+}
+
+// ─────────────────────────────────────────────────────
+// ROUTING — extraer pedidoId del path /update/{id}
+// ─────────────────────────────────────────────────────
+
+function parseFromURL() {
+  const href = window.location.href;
+  const match = href.match(/\/update\/([^\/\?#]+)/i);
+  const rawId = match ? decodeURIComponent(match[1]) : null;
+  STATE.pedidoId = rawId ? cleanId(rawId) : null;
+
+  const params = new URLSearchParams(window.location.search);
+  STATE.bNum  = params.get('b');
+  STATE.bTotal = params.get('t');
+  STATE.sig   = params.get('sig');
+}
+
+// ─────────────────────────────────────────────────────
+// FETCH PEDIDO (con fallback offline)
+// ─────────────────────────────────────────────────────
+
+async function fetchPedido() {
+  const url = `${CFG.QR_GAS_URL}?pedidoId=${encodeURIComponent(STATE.pedidoId)}&t=${Date.now()}`;
+  const res = await fetch(url, { mode: 'cors', credentials: 'omit', redirect: 'follow' });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || 'Pedido no encontrado');
+  return json.data;
+}
+
+// ─────────────────────────────────────────────────────
+// ACTUALIZAR ESTADO
+// ─────────────────────────────────────────────────────
+
+async function updateStatus(newStatus, cells = {}) {
+  const params = new URLSearchParams({
+    action: 'updateStatus',
+    pedidoId: STATE.pedidoId,
+    newStatus,
+    ...(STATE.bNum  && { b: STATE.bNum }),
+    ...(STATE.bTotal && { t: STATE.bTotal }),
+    ...(STATE.sig   && { sig: STATE.sig }),
+  });
+
+  // Añadir celdas individuales como columnas por letra
+  Object.entries(cells).forEach(([col, val]) => params.append(col, val ?? ''));
+
+  const url = `${CFG.QR_GAS_URL}?${params.toString()}`;
+  const res = await fetch(url, { mode: 'cors', credentials: 'omit', redirect: 'follow' });
+  const json = await res.json();
+  return json.success;
+}
+
+// ─────────────────────────────────────────────────────
+// LÓGICA DE ESTADO DEL PEDIDO
+// ─────────────────────────────────────────────────────
+
+function getEstado() {
+  return String(STATE.pedido?.estado_produccion || '').toLowerCase();
+}
+
+function isYute() {
+  return String(STATE.pedido?.taller || '').toLowerCase().includes('yute');
+}
+
+function isPicking()       { const e = getEstado(); return e.includes('etiquetado') || e === '' || e.includes('pendiente'); }
+function isPickingOk()     { return getEstado().includes('asignado'); }
+function isEnProceso()     { return getEstado().includes('proceso'); }
+function isListoImpresor() { return getEstado().includes('impresor'); }
+function isListoTaller()   { const e = getEstado(); return e.includes('taller') || e.includes('terminado'); }
+
+function getStatusBadgeClass(estado) {
+  const e = String(estado || '').toLowerCase();
+  if (e.includes('proceso'))   return 'badge badge-amber';
+  if (e.includes('asignado'))  return 'badge badge-indigo';
+  if (e.includes('impresor'))  return 'badge badge-blue';
+  if (e.includes('taller') || e.includes('terminado')) return 'badge badge-green';
+  return 'badge badge-slate';
+}
+
+// ─────────────────────────────────────────────────────
+// ACCIONES YUTE
+// ─────────────────────────────────────────────────────
+
+function getNombre(action) {
+  const isImpresor = action === 'start' || action === 'finish';
+  const raw = isImpresor ? STATE.impresor : STATE.operario;
+  return raw === 'Otro' ? STATE.nombreManual : raw;
+}
+
+async function handleAction(actionType) {
+  const nombre = getNombre(actionType);
+  if (!nombre) { alert('Por favor selecciona o escribe tu nombre.'); return; }
+
+  const ahora = now();
+  let nextStatus = '';
+  let cells = {};
+
+  switch (actionType) {
+    case 'picking':
+      nextStatus = 'Asignado';
+      cells = { J: ahora, AJ: nombre };
+      break;
+    case 'start':
+      nextStatus = 'En Proceso';
+      cells = { K: 'true', L: ahora, AH: nombre };
+      break;
+    case 'finish':
+      nextStatus = 'Listo Impresor';
+      cells = { F: ahora, K: 'true', L: STATE.pedido.fecha_vb || ahora, AH: STATE.pedido.impresor || nombre };
+      break;
+    case 'ready_taller':
+      nextStatus = 'Listo Taller';
+      cells = { AI: STATE.comentario, AJ: nombre };
+      break;
+    default: return;
+  }
+
+  await submitUpdate(nextStatus, cells);
+}
+
+async function handleSimpleUpdate(newStatus) {
+  await submitUpdate(newStatus, {});
+}
+
+async function submitUpdate(newStatus, cells) {
+  if (STATE.updating) return;
+  STATE.updating = true;
+  renderUpdatingState();
+
+  try {
+    const ok = await updateStatus(newStatus, cells);
+    if (ok) {
+      STATE.pedido = { ...STATE.pedido, estado_produccion: newStatus };
+      STATE.success = true;
+      renderSuccess();
+    } else {
+      throw new Error('El servidor no confirmó la actualización.');
+    }
+  } catch (err) {
+    // Modo offline: encolar y asumir éxito
+    enqueueOffline(newStatus, cells);
+    STATE.pedido = { ...STATE.pedido, estado_produccion: newStatus };
+    STATE.success = true;
+    renderSuccess(true);
+  } finally {
+    STATE.updating = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// COLA OFFLINE
+// ─────────────────────────────────────────────────────
+
+function enqueueOffline(newStatus, cells) {
+  STATE.offlineQueue.push({ pedidoId: STATE.pedidoId, newStatus, cells, ts: Date.now() });
+  localStorage.setItem('qr_offline_queue', JSON.stringify(STATE.offlineQueue));
+}
+
+async function flushOfflineQueue() {
+  if (!STATE.offlineQueue.length) return;
+  const remaining = [];
+  for (const item of STATE.offlineQueue) {
+    try {
+      const ok = await updateStatus(item.newStatus, item.cells);
+      if (!ok) remaining.push(item);
+    } catch { remaining.push(item); }
+  }
+  STATE.offlineQueue = remaining;
+  localStorage.setItem('qr_offline_queue', JSON.stringify(remaining));
+}
+
+// ─────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────
+
+function renderUpdatingState() {
+  document.querySelectorAll('.btn').forEach(b => { b.disabled = true; });
+}
+
+function renderSuccess(isOffline = false) {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="success-box" style="margin-top:48px">
+      <div class="success-icon">✅</div>
+      <div class="success-title">¡Actualizado con éxito!</div>
+      <p class="success-sub">
+        ${isOffline
+          ? 'Guardado localmente. Se sincronizará cuando haya conexión.'
+          : 'La Control Tower ya refleja este cambio.'}
+      </p>
+      <button class="btn-retry" onclick="resetAndRender()">Realizar otro cambio</button>
+    </div>
+    <p class="footer">Control Tower Mobile · Trazabilidad QR · Daniel Torres Urbina</p>
+  `;
+}
+
+function resetAndRender() {
+  STATE.success = false;
+  renderApp();
+}
+
+function renderError(msg) {
+  document.getElementById('app').innerHTML = `
+    <div class="center">
+      <div style="font-size:48px">⚠️</div>
+      <h2 style="font-size:20px;font-weight:900">Algo salió mal</h2>
+      <p class="text-sm" style="color:#64748b;max-width:260px">${msg}</p>
+      <button onclick="location.reload()" style="margin-top:12px;background:#2563eb;color:#fff;border:none;padding:12px 24px;border-radius:10px;font-weight:900;cursor:pointer">REINTENTAR</button>
+    </div>
+  `;
+}
+
+function renderApp() {
+  const p = STATE.pedido;
+  const yute = isYute();
+  const estado = p.estado_produccion || 'Pendiente';
+  const offlineCount = STATE.offlineQueue.length;
+
+  // Determinar qué selector mostrar
+  const showSelector = yute;
+  const selectorForImpresor = isPickingOk() || isEnProceso();
+  const selectorStaff  = selectorForImpresor ? CFG.STAFF_IMPRESION : CFG.STAFF_PICKING;
+  const selectorValue  = selectorForImpresor ? STATE.impresor : STATE.operario;
+  const selectorLabel  = selectorForImpresor ? 'Identificación Impresor' : 'Identificación Operario (Picking/Calidad)';
+
+  const html = `
+    ${offlineCount ? `
+    <div class="offline-bar">
+      <span>🔄 ${offlineCount} cambios pendientes de sync</span>
+      <span>Modo Offline</span>
+    </div>` : ''}
+
+    <!-- Ficha del pedido -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <span class="badge badge-blue">Ficha del Pedido</span>
+        <span class="label-xs" style="font-family:monospace">#${STATE.pedidoId}</span>
+      </div>
+
+      ${renderAuthBanner()}
+
+      <h1 style="font-size:22px;font-weight:900;line-height:1.2;margin-bottom:4px">
+        ${p.nombre_proyecto || p.proyecto || 'Proyecto sin nombre'}
+      </h1>
+      <p class="text-sm" style="color:#64748b;margin-bottom:4px">${p.sku || 'SKU no especificado'}</p>
+
+      <div class="info-grid">
+        <div>
+          <p class="label-xs">Unidades</p>
+          <p class="info-val">${p.unidades || 0}</p>
+        </div>
+        <div>
+          <p class="label-xs">Taller</p>
+          <p class="info-val white">${getTallerLabel(p.taller)}</p>
+        </div>
+      </div>
+    </div>
+
+    ${yute ? renderTraceability() : ''}
+
+    ${showSelector ? renderSelector(selectorLabel, selectorStaff, selectorValue, selectorForImpresor) : ''}
+
+    <!-- Estado actual -->
+    <div style="margin:16px 0;display:flex;flex-direction:column;align-items:center;gap:8px">
+      <p class="label-xs">Estado Actual del Pedido</p>
+      <span class="${getStatusBadgeClass(estado)}" style="font-size:13px;padding:6px 16px">${estado}</span>
+    </div>
+
+    <!-- Botones de acción -->
+    <div class="gap-3" id="action-area">
+      ${renderActions(yute)}
+    </div>
+
+    <p class="footer">Control Tower Mobile · Trazabilidad QR · Daniel Torres Urbina</p>
+  `;
+
+  document.getElementById('app').innerHTML = html;
+  bindEvents();
+}
+
+function renderAuthBanner() {
+  if (!STATE.sig) return '';
+  if (STATE.isAuthentic) {
+    return `
+      <div class="auth-ok" style="margin-bottom:12px">
+        <span style="font-size:18px">🛡️</span>
+        <div style="flex:1">
+          <p class="label-xs" style="color:#4ade80;margin-bottom:2px">Etiqueta Original Verificada</p>
+          <p class="text-xs" style="color:#86efac;opacity:.85">Firma: ${STATE.sig} · Bulto ${STATE.bNum}/${STATE.bTotal}</p>
+        </div>
+        <span class="auth-tag">HMAC-OK</span>
+      </div>`;
+  }
+  return `
+    <div class="auth-err" style="margin-bottom:12px">
+      <span style="font-size:18px">🚨</span>
+      <div>
+        <p class="label-xs" style="color:#f87171;margin-bottom:2px">Alerta de Seguridad</p>
+        <p class="text-xs" style="color:#fca5a5;opacity:.85">Esta etiqueta no tiene firma criptográfica válida.</p>
+      </div>
+    </div>`;
+}
+
+function renderTraceability() {
+  const p = STATE.pedido;
+  return `
+    <div class="card">
+      <p class="label-xs" style="margin-bottom:12px">📋 Historial de Proceso</p>
+      <div>
+        <div class="trace-row">
+          <span class="label-sm">Picking / Entrega:</span>
+          <div class="trace-right">
+            <span class="trace-date">${p.fecha_envio_taller_diseno || '---'}</span>
+            <span class="trace-who">${p.operario_picking || 'SIN REGISTRO'}</span>
+          </div>
+        </div>
+        <div class="trace-row">
+          <span class="label-sm">Inicio / VB:</span>
+          <div class="trace-right">
+            <span class="trace-date">${p.fecha_vb || '---'}</span>
+            <span class="trace-who">${p.vb ? '✅' : '❌'} ${p.impresor || ''}</span>
+          </div>
+        </div>
+        <div class="trace-row">
+          <span class="label-sm">Retiro Taller:</span>
+          <span class="trace-date">${p.fecha_retiro_real || '---'}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderSelector(label, staff, currentVal, isImpresorMode) {
+  const otroSelected = currentVal === 'Otro';
+  const options = staff.map(name =>
+    `<option value="${name}" ${name === currentVal ? 'selected' : ''}>${name.toUpperCase()}</option>`
+  ).join('');
+
+  return `
+    <div class="card" style="border-color:rgba(99,102,241,.3)">
+      <p class="label-xs" style="margin-bottom:10px">👤 ${label}</p>
+      <div class="gap-3">
+        <select id="staff-select" data-mode="${isImpresorMode ? 'impresor' : 'operario'}">
+          <option value="">¿QUIÉN ERES?</option>
+          ${options}
+        </select>
+        ${otroSelected ? `
+        <input type="text" id="nombre-manual" placeholder="ESCRIBE TU NOMBRE AQUÍ..."
+          value="${STATE.nombreManual}" />
+        ` : ''}
+      </div>
+    </div>`;
+}
+
+function renderActions(yute) {
+  if (!yute) {
+    // Flujo genérico: dos botones simples
+    const enProceso = getEstado().includes('proceso');
+    const listoTaller = isListoTaller();
+    return `
+      <button class="btn btn-blue ${enProceso ? 'btn-done' : ''}"
+        ${enProceso ? 'disabled' : ''} data-action="simple-proceso">
+        🏭 INICIAR PRODUCCIÓN
+      </button>
+      <button class="btn btn-green ${listoTaller ? 'btn-done' : ''}"
+        ${listoTaller ? 'disabled' : ''} data-action="simple-taller">
+        ✅ LISTO PARA RETIRO
+      </button>`;
+  }
+
+  // Flujo Yute: botones contextuales
+  if (isPicking())       return `<button class="btn btn-indigo" data-action="picking">📦 COMPLETAR PICKING<span class="sub">REGISTRAR ENTREGA (J/AJ)</span></button>`;
+  if (isPickingOk())     return `<button class="btn btn-amber"  data-action="start">▶️ INICIAR IMPRESIÓN<span class="sub">REGISTRAR INICIO (L/AH)</span></button>`;
+  if (isEnProceso())     return `<button class="btn btn-green"  data-action="finish">✅ LISTO IMPRESOR<span class="sub">REGISTRAR RETIRO (F)</span></button>`;
+  if (isListoImpresor()) return `<button class="btn btn-blue"   data-action="ready_taller">📋 LISTO TALLER<span class="sub">CONTROL CALIDAD (AI)</span></button>`;
+  if (isListoTaller())   return `<div class="btn btn-done">PASOS COMPLETADOS ✅</div>`;
+  return '';
+}
+
+function getTallerLabel(taller) {
+  if (!taller) return 'N/A';
+  const MAP = { 'yute impresiones': 'YUTE IMPRESIONES', lidi: 'L', romel: 'R', pintapack: 'P', ideamania: 'M', simpleprint: 'S', 'we are spa': 'W' };
+  return MAP[taller.toLowerCase().trim()] ?? taller.charAt(0).toUpperCase();
+}
+
+// ─────────────────────────────────────────────────────
+// EVENT BINDING
+// ─────────────────────────────────────────────────────
+
+function bindEvents() {
+  // Selector de personal
+  const sel = document.getElementById('staff-select');
+  if (sel) {
+    sel.addEventListener('change', e => {
+      const val = e.target.value;
+      const mode = e.target.dataset.mode;
+      if (mode === 'impresor') {
+        STATE.impresor = val;
+        localStorage.setItem('yute_operario_impresion', val);
+      } else {
+        STATE.operario = val;
+        localStorage.setItem('yute_operario_picking', val);
+      }
+      STATE.nombreManual = '';
+      renderApp();
+    });
+  }
+
+  // Input nombre manual
+  const inp = document.getElementById('nombre-manual');
+  if (inp) {
+    inp.addEventListener('input', e => { STATE.nombreManual = e.target.value; });
+    inp.focus();
+  }
+
+  // Botones de acción
+  document.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = btn.dataset.action;
+      if (action === 'ready_taller') {
+        showComentarioModal();
+      } else if (action === 'simple-proceso') {
+        await handleSimpleUpdate('En Proceso');
+      } else if (action === 'simple-taller') {
+        await handleSimpleUpdate('Listo Taller');
+      } else {
+        await handleAction(action);
+      }
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────
+// MODAL COMENTARIO (Listo Taller)
+// ─────────────────────────────────────────────────────
+
+function showComentarioModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'comentario-modal';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <p class="modal-title">💬 Reporte Control de Calidad</p>
+      <textarea id="modal-comentario" placeholder="Ej: Unidades OK, impresión nítida y empaque revisado...">${STATE.comentario}</textarea>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="modal-cancel">CANCELAR</button>
+        <button class="modal-save"   id="modal-save">GUARDAR</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById('modal-cancel').onclick = () => overlay.remove();
+  document.getElementById('modal-save').onclick = async () => {
+    STATE.comentario = document.getElementById('modal-comentario').value;
+    overlay.remove();
+    await handleAction('ready_taller');
+  };
+}
+
+// ─────────────────────────────────────────────────────
+// INICIALIZACIÓN
+// ─────────────────────────────────────────────────────
+
+async function init() {
+  parseFromURL();
+
+  if (!STATE.pedidoId || STATE.pedidoId === 'undefined') {
+    renderError('ID de pedido inválido. Por favor escanea el QR nuevamente.');
+    return;
+  }
+
+  // Intentar vaciar cola offline en paralelo (sin bloquear carga)
+  flushOfflineQueue().catch(() => {});
+
+  try {
+    STATE.pedido = await fetchPedido();
+  } catch (err) {
+    renderError(`No se pudo cargar el pedido.<br><small style="color:#475569">${err.message}</small>`);
+    return;
+  }
+
+  // Verificar firma HMAC
+  if (STATE.sig && STATE.bNum && STATE.bTotal) {
+    const expected = await computeHMAC(
+      `${STATE.pedidoId}-${STATE.bNum}-${STATE.bTotal}`,
+      CFG.CLIENT_SALT
+    );
+    STATE.isAuthentic = (expected === STATE.sig);
+    if (!STATE.isAuthentic) {
+      // Reportar fraude en paralelo al GAS principal (no bloquear UI)
+      fetch(`${CFG.QR_GAS_URL}?action=fraudReport&pedidoId=${STATE.pedidoId}&sig=${STATE.sig}`)
+        .catch(() => {});
+    }
+  }
+
+  renderApp();
+}
+
+init();
+</script>
+</body>
+</html>
