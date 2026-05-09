@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layers, Truck, CalendarClock, AlertCircle, Zap, Activity } from 'lucide-react';
-import { useData, getLocalYMD, formatDateDisplay } from '../context/DataContext';
+import { useData, getLocalYMD, formatDateDisplay, parseNumber } from '../context/DataContext';
 import StatusBadge from '../components/StatusBadge';
 import ProjectDetailsModal from '../components/ProjectDetailsModal';
 
@@ -23,15 +23,11 @@ const StatCard = ({ title, value, icon: Icon, color, trend }) => (
   </div>
 );
 
-const ControlTower = () => {
-  const { data: mockConsolidatedData, isLoading } = useData();
-  const [selectedPedido, setSelectedPedido] = React.useState(null);
+const RISK_ORDER = { rojo: 0, amarillo: 1, verde: 2 };
 
-  React.useEffect(() => {
-    if (mockConsolidatedData && mockConsolidatedData.length > 0) {
-      console.log("DEBUG: Primer pedido de la data:", mockConsolidatedData[0]);
-    }
-  }, [mockConsolidatedData]);
+const ControlTower = () => {
+  const { data: mockConsolidatedData, talleres, isLoading } = useData();
+  const [selectedPedido, setSelectedPedido] = React.useState(null);
 
   if (isLoading) {
     return (
@@ -63,6 +59,13 @@ const ControlTower = () => {
     p => String(p.metodo_entrega || '').toLowerCase().includes('express') || String(p.comentario_kam || '').toLowerCase().includes('urgent')
   ).length;
 
+  const talleresSaturados = talleres.filter(taller => {
+    const impresiones = pedidosActivos
+      .filter(p => p.taller === taller.nombre)
+      .reduce((acc, p) => acc + parseNumber(p.impresiones), 0);
+    return (impresiones / taller.capacidad_semanal_impresiones) * 100 > 85;
+  }).length;
+
   // Evaluar riesgo
   const evaluarRiesgo = (pedido) => {
     if ((pedido.fecha_retiro_ideal <= today || pedido.estado_produccion === "Atrasado") && !pedido.fecha_retiro_real) return 'rojo';
@@ -80,7 +83,7 @@ const ControlTower = () => {
 
   const pedidosCriticos = pedidosActivos.map(p => ({ ...p, riesgo: evaluarRiesgo(p) }))
     .filter(p => p.riesgo !== 'verde')
-    .sort((a, b) => a.riesgo === 'rojo' ? -1 : 1);
+    .sort((a, b) => (RISK_ORDER[a.riesgo] ?? 2) - (RISK_ORDER[b.riesgo] ?? 2));
 
   return (
     <div className="space-y-6">
@@ -98,7 +101,7 @@ const ControlTower = () => {
         <StatCard title="Retiros Mañana" value={retirosManana} icon={CalendarClock} color="blue" />
         <StatCard title="Pedidos Atrasados" value={pedidosAtrasados} icon={AlertCircle} color="red" trend="Requieren gestión" />
         <StatCard title="Urgentes/Express" value={expressUrgentes} icon={Zap} color="amber" />
-        <StatCard title="Talleres Saturados" value={0} icon={Activity} color="orange" trend="Carga > 85%" />
+        <StatCard title="Talleres Saturados" value={talleresSaturados} icon={Activity} color="orange" trend="Carga > 85%" />
       </div>
 
       <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">

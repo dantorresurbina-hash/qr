@@ -637,31 +637,64 @@ async function init() {
     return;
   }
 
-  // Intentar vaciar cola offline en paralelo (sin bloquear carga)
+  // Mostrar skeleton inmediato con el ID conocido (mientras llega el GAS)
+  renderSkeleton();
+
+  // Vaciar cola offline en paralelo (sin bloquear carga)
   flushOfflineQueue().catch(() => {});
 
+  // Lanzar fetch del pedido y cálculo HMAC en paralelo
+  const hmacPromise = (STATE.sig && STATE.bNum && STATE.bTotal)
+    ? computeHMAC(`${STATE.pedidoId}-${STATE.bNum}-${STATE.bTotal}`, CFG.CLIENT_SALT)
+    : Promise.resolve(null);
+
+  let pedido;
   try {
-    STATE.pedido = await fetchPedido();
+    [pedido] = await Promise.all([fetchPedido(), hmacPromise.catch(() => null)]);
+    STATE.pedido = pedido;
   } catch (err) {
     renderError(`No se pudo cargar el pedido.<br><small style="color:#475569">${err.message}</small>`);
     return;
   }
 
-  // Verificar firma HMAC
-  if (STATE.sig && STATE.bNum && STATE.bTotal) {
-    const expected = await computeHMAC(
-      `${STATE.pedidoId}-${STATE.bNum}-${STATE.bTotal}`,
-      CFG.CLIENT_SALT
-    );
-    STATE.isAuthentic = (expected === STATE.sig);
+  // Resultado del HMAC ya está listo (corrió en paralelo)
+  const hmacResult = await hmacPromise.catch(() => null);
+  if (hmacResult !== null) {
+    STATE.isAuthentic = (hmacResult === STATE.sig);
     if (!STATE.isAuthentic) {
-      // Reportar fraude en paralelo al GAS principal (no bloquear UI)
       fetch(`${CFG.QR_GAS_URL}?action=fraudReport&pedidoId=${STATE.pedidoId}&sig=${STATE.sig}`)
         .catch(() => {});
     }
   }
 
   renderApp();
+}
+
+function renderSkeleton() {
+  document.getElementById('app').innerHTML = `
+    <div class="card" style="opacity:.6">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <span class="badge badge-blue">Ficha del Pedido</span>
+        <span class="label-xs" style="font-family:monospace">#${STATE.pedidoId || '...'}</span>
+      </div>
+      <div style="height:22px;background:#334155;border-radius:8px;margin-bottom:10px;width:65%"></div>
+      <div style="height:13px;background:#1e293b;border-radius:6px;width:38%"></div>
+      <div class="info-grid">
+        <div>
+          <p class="label-xs">Unidades</p>
+          <div style="height:28px;background:#334155;border-radius:8px;margin-top:4px"></div>
+        </div>
+        <div>
+          <p class="label-xs">Taller</p>
+          <div style="height:28px;background:#334155;border-radius:8px;margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:center;padding:20px 0;display:flex;align-items:center;justify-content:center;gap:10px;color:#475569">
+      <div class="spinner" style="width:20px;height:20px;border-width:3px"></div>
+      <span class="text-sm">Cargando datos del pedido…</span>
+    </div>
+  `;
 }
 
 init();
