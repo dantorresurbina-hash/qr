@@ -16,6 +16,7 @@ const Labeling = lazy(() => import('./pages/Labeling'));
 const QuickUpdate = lazy(() => import('./pages/QuickUpdate'));
 const WorkshopMode = lazy(() => import('./pages/WorkshopMode'));
 const YuteWorkshopMode = lazy(() => import('./pages/YuteWorkshopMode'));
+const DispatchGuide = lazy(() => import('./pages/DispatchGuide'));
 
 const LoadingFallback = () => (
   <div className="flex flex-col items-center justify-center h-64 text-slate-400">
@@ -36,7 +37,8 @@ const PERMISSIONS = {
   yute: ['admin'],
   ai: ['kam', 'admin'],
   historical: ['admin'],
-  tv: ['admin']
+  tv: ['admin'],
+  dispatch: ['admin', 'kam']
 };
 
 function App() {
@@ -95,6 +97,7 @@ function App() {
         case 'yute': return <YuteWorkshopMode />;
         case 'ai': return <AIAssistant contextTab={window.lastTab || 'tower'} />;
         case 'historical': return <HistoricalAnalysis />;
+        case 'dispatch': return <DispatchGuide />;
         default: return <ControlTower />;
       }
     };
