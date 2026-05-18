@@ -1,134 +1,188 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, User, ChevronRight } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Sparkles, Send, User, AlertCircle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { useData, getLocalYMD, parseNumber } from '../context/DataContext';
-import { designKnowledge } from '../data/knowledgeBase';
+
+const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+const CLAUDE_MODEL   = 'claude-haiku-4-5-20251001';
+const MAX_HISTORY    = 6; // turnos de conversación a mantener como contexto
 
 const getContextualQuestions = (tab) => {
   const common = [
-    "¿Qué talleres tienen capacidad disponible?",
-    "¿Hay riesgo de saturación la próxima semana?"
+    '¿Qué talleres tienen capacidad disponible?',
+    '¿Hay riesgo de saturación la próxima semana?',
   ];
-
   switch (tab) {
     case 'capacity':
-      return [
-        ...common,
-        "¿Quién tiene más espacio para 3000 imp?",
-        "¿Cómo ha evolucionado el Health Score de Pintapack?"
-      ];
+      return [...common, '¿Quién tiene más espacio para 3000 imp?', '¿Cómo ha evolucionado el Health Score de Pintapack?'];
     case 'logistics':
-      return [
-        "¿Qué pedidos están listos para retiro hoy?",
-        "¿Cuál es el taller más cercano a la planta?",
-        "¿Hay transportes pendientes de confirmación?"
-      ];
+      return ['¿Qué pedidos están listos para retiro hoy?', '¿Cuál es el taller más cercano a la planta?', '¿Hay transportes pendientes de confirmación?'];
     case 'conflicts':
-      return [
-        "¿Por qué está atrasado el pedido #5543?",
-        "¿Qué taller tiene más pedidos críticos?",
-        "¿Cómo afectará el atraso de DOVE a la entrega?"
-      ];
+      return ['¿Por qué está atrasado el pedido #5543?', '¿Qué taller tiene más pedidos críticos?', '¿Cómo afectará el atraso de DOVE a la entrega?'];
     default:
-      return [
-        ...common,
-        "¿Cuáles son los pedidos críticos o atrasados?",
-        "¿Puede Pintapack tomar 5000 impresiones urgentes?"
-      ];
+      return [...common, '¿Cuáles son los pedidos críticos o atrasados?', '¿Puede Pintapack tomar 5000 impresiones urgentes?'];
   }
 };
 
 const AIAssistant = ({ contextTab = 'tower' }) => {
-  const { data: mockConsolidatedData, talleres, isLoading } = useData();
+  const { data, talleres, isLoading } = useData();
   const presetQuestions = getContextualQuestions(contextTab);
-  const getTalleres = () => talleres;
 
-  const [messages, setMessages] = useState([
+  const [messages, setMessages]     = useState([
     { id: 1, role: 'ai', text: '¡Hola! Soy la Control Tower AI. Estoy monitoreando en directo tus indicadores conectada a Google Sheets y tus límites de capacidad. ¿En qué te ayudo?' }
   ]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef(null);
-
-  const mockResponses = {
-    "¿Qué talleres tienen capacidad disponible?": () => {
-      const ts = talleres;
-      const activos = mockConsolidatedData.filter(p => !p.fecha_retiro_real);
-      const msgs = ts.map(t => {
-        const imps = activos.filter(p => p.taller === t.nombre).reduce((acc, p) => acc + (parseNumber(p.impresiones) || parseNumber(p.unidades)), 0);
-        const capPct = t.capacidad_semanal_impresiones > 0 ? (imps / t.capacidad_semanal_impresiones) * 100 : 0;
-
-        // Cálculo rápido de Health Score para la respuesta
-        const pedidosArr = activos.filter(p => p.taller === t.nombre);
-        const atrasoPromedio = pedidosArr.length > 0 ? (pedidosArr.reduce((acc, p) => acc + parseNumber(p.dias_retraso), 0) / pedidosArr.length) : 0;
-        let score = 100 - (capPct > 80 ? (capPct - 80) * 2 : 0) - (atrasoPromedio * 15);
-        score = Math.max(0, Math.min(100, Math.round(score)));
-
-        return `**${t.nombre}**: ${Math.max(0, 100 - capPct).toFixed(1)}% libre (Health Score: ${score}).`;
-      });
-      return `Analizando la red operativa, esta es la disponibilidad actual:\n\n${msgs.join('\n')}\n\nLos talleres con Score > 85 son los más recomendados para nuevas asignaciones.`;
-    },
-    "¿Hay riesgo de saturación la próxima semana?": () => {
-      const ts = talleres;
-      const activos = mockConsolidatedData.filter(p => !p.fecha_retiro_real);
-      const hoy = new Date();
-      const proximaSemana = new Date(); proximaSemana.setDate(hoy.getDate() + 7);
-      const dosSemanas = new Date(); dosSemanas.setDate(hoy.getDate() + 14);
-
-      let alertas = [];
-      ts.forEach(t => {
-        const cargaFutura = activos.filter(p => {
-          const f = new Date(p.fecha_retiro_ideal);
-          return f > proximaSemana && f <= dosSemanas && p.taller === t.nombre;
-        }).reduce((acc, p) => acc + (parseNumber(p.impresiones) || parseNumber(p.unidades)), 0);
-
-        if (cargaFutura > (t.capacidad_semanal_impresiones * 0.8)) {
-          alertas.push(`⚠️ **${t.nombre}**: Alta concentración de retiros proyectada para la semana subsiguiente (${cargaFutura.toLocaleString()} imp).`);
-        }
-      });
-
-      if (alertas.length === 0) return "He analizado la carga proyectada para los próximos 14 días y no detecto riesgos inminentes de saturación. La red está equilibrada.";
-      return `### Análisis de Riesgo Proyectado 🧠\n\nHe detectado los siguientes cuellos de botella en formación:\n\n${alertas.join('\n')}\n\nSe recomienda adelantar producciones o negociar fechas antes de que se confirme más carga.`;
-    },
-    "¿Cuáles son los pedidos críticos o atrasados?": () => {
-      const todayStr = getLocalYMD();
-      const atrasados = mockConsolidatedData.filter(p => !p.fecha_retiro_real && p.fecha_retiro_ideal < todayStr);
-      if (atrasados.length === 0) return "Cero pedidos vencidos detectados. ¡La producción va según lo ideal!";
-
-      const porTaller = atrasados.reduce((acc, p) => {
-        acc[p.taller] = (acc[p.taller] || 0) + 1;
-        return acc;
-      }, {});
-
-      const lista = Object.entries(porTaller).map(([t, count]) => `- **${t}**: ${count} ${count === 1 ? 'pedido atrasado' : 'pedidos atrasados'}`).join('\n');
-      return `He detectado ${atrasados.length} pedidos fuera de plazo:\n\n${lista}\n\nLos detalles específicos están resaltados en la tabla de Conflictos.`;
-    },
-    "¿Puede Pintapack tomar 5000 impresiones urgentes?": () => {
-      const t = talleres.find(t => t.nombre.includes('Pintapack'));
-      if (!t) return "No encuentro datos de ese taller en la configuración actual.";
-
-      const activos = mockConsolidatedData.filter(p => !p.taller === t.nombre && !p.fecha_retiro_real);
-      const imps = activos.reduce((acc, p) => acc + (parseNumber(p.impresiones) || parseNumber(p.unidades)), 0);
-      const futurePct = t.capacidad_semanal_impresiones > 0 ? ((imps + 5000) / t.capacidad_semanal_impresiones) * 100 : 100;
-
-      if (futurePct > 85) {
-        return `⛔ **Efecto de Riesgo**: Añadir 5.000 impresiones llevaría a **${t.nombre}** al **${futurePct.toFixed(1)}%** de carga. Esto impactaría negativamente en su Score de Salud.\n\nBusca un proveedor con carga < 60% en la pestaña de Capacidad.`;
-      } else {
-        return `✅ **Factible**: El taller **${t.nombre}** quedaría en un **${futurePct.toFixed(1)}%** de ocupación. Tienen espacio para absorber este pedido sin comprometer la red.`;
-      }
-    }
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const [input, setInput]           = useState('');
+  const [isTyping, setIsTyping]     = useState(false);
+  const [apiError, setApiError]     = useState(null);
+  const messagesEndRef              = useRef(null);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // System prompt construido con datos reales de Google Sheets
+  const systemPrompt = useMemo(() => {
+    if (!data || !talleres) return '';
+
+    const today     = getLocalYMD();
+    const activos   = data.filter(p => !p.fecha_retiro_real);
+    const atrasados = activos.filter(p => p.fecha_retiro_ideal && p.fecha_retiro_ideal < today);
+    const express   = activos.filter(p =>
+      String(p.metodo_entrega || '').toLowerCase().includes('express') ||
+      String(p.comentario_kam || '').toLowerCase().includes('urgent')
+    );
+
+    const talleresConCarga = talleres.map(t => {
+      const carga = activos
+        .filter(p => p.taller === t.nombre)
+        .reduce((acc, p) => acc + parseNumber(p.impresiones || p.unidades), 0);
+      const pct = t.capacidad_semanal_impresiones > 0
+        ? Math.round((carga / t.capacidad_semanal_impresiones) * 100)
+        : 0;
+      return { nombre: t.nombre, carga_pct: pct, capacidad: t.capacidad_semanal_impresiones, impresiones_actuales: carga };
+    });
+
+    const criticos = activos
+      .filter(p => p.fecha_retiro_ideal && p.fecha_retiro_ideal <= today)
+      .slice(0, 10)
+      .map(p => ({
+        pedido_id: p.pedido_id,
+        proyecto: p.nombre_proyecto,
+        taller: p.taller,
+        estado_prod: p.estado_produccion,
+        estado_log: p.estado_logistico,
+        retiro_ideal: p.fecha_retiro_ideal,
+      }));
+
+    return `Eres el Asistente Operativo de Control Tower de Yute Natural.
+Tu rol es responder consultas sobre el estado operativo en tiempo real basándote en los datos de Google Sheets.
+
+DATOS OPERATIVOS ACTUALES (${today}):
+- Pedidos en producción (sin retirar): ${activos.length}
+- Pedidos atrasados (retiro ideal < hoy): ${atrasados.length}
+- Pedidos urgentes/express: ${express.length}
+
+TALLERES Y CAPACIDAD:
+${JSON.stringify(talleresConCarga, null, 2)}
+
+PEDIDOS CRÍTICOS ATRASADOS (máx 10):
+${criticos.length > 0 ? JSON.stringify(criticos, null, 2) : 'Ninguno — operación al día.'}
+
+INSTRUCCIONES:
+- Responde SIEMPRE en español, de forma concisa y operativa (máx 150 palabras)
+- Si preguntan por un pedido específico con número, dilo claramente si no está en el contexto
+- Usa **negrita** para valores clave y listas con • cuando aplique
+- No inventes datos que no estén en este contexto
+- Si no tienes el dato, di "No tengo ese dato disponible en este momento"`;
+  }, [data, talleres]);
+
+  const handleSend = async (presetText) => {
+    const textToSend = presetText || input;
+    if (!textToSend.trim() || isTyping) return;
+
+    setApiError(null);
+
+    // Detectar si es una solicitud de gráfico comparativo (lógica local mantenida)
+    const textLower = textToSend.toLowerCase();
+    const isChartRequest = textLower.includes('comparar') || textLower.includes(' vs ') || textLower.includes('rendimiento');
+
+    const newUserMsg = { id: Date.now(), role: 'user', text: textToSend };
+    setMessages(prev => [...prev, newUserMsg]);
+    setInput('');
+    setIsTyping(true);
+
+    // Gráfico comparativo: respuesta local sin LLM
+    if (isChartRequest) {
+      const chartData = talleres.map(t => {
+        const activos = data.filter(p => p.taller === t.nombre && !p.fecha_retiro_real);
+        const imps    = activos.reduce((acc, p) => acc + parseNumber(p.impresiones || p.unidades), 0);
+        const atraso  = activos.reduce((acc, p) => acc + parseNumber(p.dias_retraso), 0) / (activos.length || 1);
+        return { name: t.nombre, impresiones: imps, retraso_promedio: Math.round(atraso * 10) / 10 };
+      });
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        role: 'ai',
+        text: 'He generado un gráfico comparativo de la carga actual y el retraso promedio por taller.',
+        chartData,
+        chartType: 'bar',
+      }]);
+      setIsTyping(false);
+      return;
+    }
+
+    // Llamada a Claude API
+    try {
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY no configurada en variables de entorno.');
+
+      // Construir historial (últimos MAX_HISTORY mensajes, excluyendo el inicial de bienvenida)
+      const history = messages
+        .slice(1)                             // omitir bienvenida
+        .slice(-(MAX_HISTORY * 2))            // mantener últimos N turnos
+        .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }));
+
+      history.push({ role: 'user', content: textToSend });
+
+      const response = await fetch(CLAUDE_API_URL, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL,
+          max_tokens: 512,
+          system: systemPrompt,
+          messages: history,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      const aiText = result?.content?.[0]?.text || 'Sin respuesta del asistente.';
+
+      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', text: aiText }]);
+    } catch (err) {
+      const errMsg = err.message || 'Error desconocido';
+      setApiError(errMsg);
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        role: 'ai',
+        text: 'No pude conectarme al asistente en este momento. Intenta de nuevo en unos segundos.',
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -138,96 +192,6 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
       </div>
     );
   }
-
-  const handleSend = (presetText) => {
-    const textToSend = presetText || input;
-    if (!textToSend.trim()) return;
-
-    const newUserMsg = { id: Date.now(), role: 'user', text: textToSend };
-    setMessages(prev => [...prev, newUserMsg]);
-    setInput('');
-    setIsTyping(true);
-
-    setTimeout(() => {
-      let aiResponseText = "Comprendo. Basado en los datos de Google Sheets, recomiendo revisar el módulo de Capacidad para ver los cuellos de botella específicos.";
-
-      const textLower = textToSend.toLowerCase();
-      const pedidoMatch = textLower.match(/\b\d{5,7}\b/); // Busca números de 5 a 7 dígitos
-
-      if (mockResponses[textToSend]) {
-        aiResponseText = mockResponses[textToSend]();
-      } else if (textLower.includes('comparar') || textLower.includes('vs') || textLower.includes('rendimiento')) {
-        // Generar datos para gráfico de comparación
-        const chartData = talleres.map(t => {
-          const activos = mockConsolidatedData.filter(p => p.taller === t.nombre && !p.fecha_retiro_real);
-          const imps = activos.reduce((acc, p) => acc + (parseNumber(p.impresiones) || parseNumber(p.unidades)), 0);
-          const atraso = activos.reduce((acc, p) => acc + parseNumber(p.dias_retraso), 0) / (activos.length || 1);
-          return { name: t.nombre, impresiones: imps, retraso_promedio: Math.round(atraso * 10) / 10 };
-        });
-
-        newUserMsg.chartData = chartData;
-        newUserMsg.chartType = 'bar';
-        aiResponseText = "He generado un gráfico comparativo de la carga actual y el retraso promedio por taller. Esto te permite identificar visualmente quién está más saturado.";
-      } else if (pedidoMatch) {
-        // V6.21: Lógica de búsqueda de pedido con normalización robusta
-        const rawTargetId = pedidoMatch[0];
-        const targetIdNorm = rawTargetId.replace(/#/g, '').trim();
-        
-        const pedido = mockConsolidatedData.find(p => {
-          const pid = String(p.pedido_id || p.id || '').replace(/#/g, '').trim();
-          return pid === targetIdNorm;
-        });
-
-        if (pedido) {
-          const displayId = pedido.pedido_id || pedido.id || rawTargetId;
-          aiResponseText = `🔍 **Información del Pedido #${displayId}**:\n\n` +
-            `• **Proyecto**: ${pedido.nombre_proyecto || 'Sin nombre'}\n` +
-            `• **Taller**: ${pedido.taller || 'No asignado'}\n` +
-            `• **Estado Prod.**: ${pedido.estado_produccion || 'Pendiente'}\n` +
-            `• **Estado Log.**: ${pedido.estado_logistico || 'No iniciado'}\n` +
-            `• **Retiro Ideal**: ${pedido.fecha_retiro_ideal || 'Sin definir'}\n` +
-            `• **Despacho Cliente**: ${pedido.fecha_entrega_cliente || 'Sin definir'}\n` +
-            `• **Impresiones**: ${(parseNumber(pedido.impresiones) || 0).toLocaleString()}\n\n` +
-            (pedido.fecha_retiro_real
-              ? `✅ El pedido ya fue retirado el ${pedido.fecha_retiro_real}.`
-              : `⏳ Pendiente de retiro. ${parseNumber(pedido.dias_retraso) > 0 ? `⚠️ Presenta **${pedido.dias_retraso} días de atraso**.` : 'Está dentro del plazo.'}`);
-        } else {
-          aiResponseText = `No encontré ningún pedido con el ID **${rawTargetId}** en los datos actuales de Sheets. Verifica si el número es correcto o si el pedido fue anulado.`;
-        }
-      } else if (textLower.includes('capacidad') || textLower.includes('libre') || textLower.includes('disponible')) {
-        aiResponseText = mockResponses["¿Qué talleres tienen capacidad disponible?"]();
-      } else if (textLower.includes('saturado') || textLower.includes('lleno') || textLower.includes('riesgo') || textLower.includes('futuro') || textLower.includes('score')) {
-        aiResponseText = mockResponses["¿Hay riesgo de saturación la próxima semana?"]();
-      } else if (textLower.includes('atrasados') || textLower.includes('críticos') || textLower.includes('vencidos') || textLower.includes('atraso')) {
-        aiResponseText = mockResponses["¿Cuáles son los pedidos críticos o atrasados?"]();
-      } else if (textLower.includes('impresiones') || textLower.includes('derivar') || textLower.includes('tomar')) {
-        aiResponseText = mockResponses["¿Puede Pintapack tomar 5000 impresiones urgentes?"]();
-      } else if (textLower.length > 5) {
-        // Búsqueda por nombre de proyecto
-        const matches = mockConsolidatedData.filter(p =>
-          p.nombre_proyecto.toLowerCase().includes(textLower) ||
-          (p.sku && p.sku.toLowerCase().includes(textLower))
-        ).slice(0, 3);
-
-        if (matches.length > 0) {
-          const list = matches.map(p => `- **#${p.pedido_id}**: ${p.nombre_proyecto} (${p.taller})`).join('\n');
-          aiResponseText = `He encontrado coincidencias para tu búsqueda:\n\n${list}\n\n¿Quieres que profundice en alguno de estos?`;
-        } else {
-          // Búsqueda en Base de Conocimiento (Fase 9)
-          const knowledgeMatch = designKnowledge.find(k =>
-            k.keywords.some(word => textLower.includes(word))
-          );
-
-          if (knowledgeMatch) {
-            aiResponseText = `💡 **Información de Procesos/Diseño**:\n\n${knowledgeMatch.content}`;
-          }
-        }
-      }
-
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', text: aiResponseText }]);
-      setIsTyping(false);
-    }, 1200);
-  };
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
@@ -240,6 +204,13 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
         </div>
       </div>
 
+      {apiError && (
+        <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span><strong>Error API:</strong> {apiError}</span>
+        </div>
+      )}
+
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {messages.map((msg) => (
@@ -250,10 +221,11 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
                 </div>
               )}
 
-              <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed ${msg.role === 'user'
+              <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed ${
+                msg.role === 'user'
                   ? 'bg-slate-800 text-white rounded-br-sm shadow-md shadow-slate-900/10'
                   : 'bg-slate-50 text-slate-800 border border-slate-200 rounded-bl-sm'
-                }`}>
+              }`}>
                 {msg.text.split('\n').map((line, i) => {
                   if (line.includes('**')) {
                     const parts = line.split('**');
@@ -263,7 +235,7 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
                       </div>
                     );
                   }
-                  return <div key={i} className={i !== 0 ? 'mt-3' : ''}>{line}</div>
+                  return <div key={i} className={i !== 0 ? 'mt-3' : ''}>{line}</div>;
                 })}
 
                 {msg.chartData && (
@@ -285,15 +257,7 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
                         </BarChart>
                       ) : (
                         <PieChart>
-                          <Pie
-                            data={msg.chartData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={70}
-                            paddingAngle={5}
-                            dataKey="value"
-                          >
+                          <Pie data={msg.chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
                             {msg.chartData.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444'][index % 4]} />
                             ))}
@@ -321,9 +285,9 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
                 <Sparkles className="w-4 h-4" />
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-2xl rounded-bl-sm px-5 py-4 flex space-x-1.5 items-center">
-                <div className="w-2 h-2 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: "0ms" }}></div>
-                <div className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                <div className="w-2 h-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                <div className="w-2 h-2 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
               </div>
             </div>
           )}
@@ -335,7 +299,8 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
             <button
               key={idx}
               onClick={() => handleSend(q)}
-              className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded-full text-xs font-medium text-slate-600 hover:border-accent hover:text-accent transition-colors"
+              disabled={isTyping}
+              className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded-full text-xs font-medium text-slate-600 hover:border-accent hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <span>{q}</span>
             </button>
@@ -343,10 +308,7 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
         </div>
 
         <div className="p-4 bg-white border-t border-slate-200">
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-            className="flex items-center relative"
-          >
+          <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center relative">
             <input
               type="text"
               value={input}
@@ -363,9 +325,7 @@ const AIAssistant = ({ contextTab = 'tower' }) => {
             </button>
           </form>
           <div className="mt-2 text-center">
-            <span className="text-[10px] text-slate-400">
-              Versión conectada a Google Sheets.
-            </span>
+            <span className="text-[10px] text-slate-400">Powered by Claude · Datos en vivo desde Google Sheets</span>
           </div>
         </div>
       </div>

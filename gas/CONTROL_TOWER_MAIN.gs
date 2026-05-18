@@ -388,10 +388,14 @@ function getConsolidatedData() {
                    || row.vbcliente === true || String(row.vbcliente || "").toLowerCase() === "true",
           fecha_vb:                formatYMD(row.fechavb || row.inicioimpresion),
           fecha_retiro_ideal:      formatYMD(row.fecharetirotallerideal || row.fecharetiroideal || row.retiroideal
-                                          || row.entregaestimada || row.fechaentrega || row.fecharetiro
-                                          || row.entrega || row.retiro),
+                                          || row.entregaestimada || row.fecharetiro || row.retiro
+                                          || row.fechaestimadaderetiro || row.fechaestimada
+                                          || row.entregaataller || row.fecharetiroataller),
           fecha_retiro_real:       formatYMD(row.fecharetiroreal || row.fecharealderetiro || row.retirotaller),
           fecha_entrega:           formatYMD(row.fechaentrega || row.fechadeentrega || row.fechadadespacho),
+          fecha_entrega_cliente:   formatYMD(row.fechaentregacliente || row.despachocliente || row.entregacliente
+                                          || row.fechadespachoalcliente || row.fechaentrega
+                                          || row.fechadeentrega || row.fechadadespacho || ""),
           canal:                   row.canal || row.metodo || row.metodoventa || "",
           metodo_entrega:          row.metodoentrega || row.metododeentrega || "",
           comentario_kam:          row.comentarioskam || row.comentariokam || "",
